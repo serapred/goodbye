@@ -42,8 +42,8 @@ def ensure(stream, resizefactor=2, timeout=3, frameskip=0):
     while timeout > time.time() and not detected:
         
         curr = get_index(curr, frameskip)
-        print(f"frame: [{curr}] (t{time.time()-timeout})")
-        
+
+        print(f"frame: [{curr}] "+"(%.2f)" %(time.time()-timeout))
         if to_process(curr):
             frame = get_frame(stream, resizefactor)
             detected = locate_faces(frame, "cnn")
