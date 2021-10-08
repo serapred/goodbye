@@ -20,26 +20,34 @@ def get_frame(stream, resizefactor=2):
 
     return rgb_frame
  
-def locate_faces(frame):
-    return face_recognition.face_locations(frame)
+def locate_faces(frame, model="hog"):
+    return face_recognition.face_locations(frame, model=model)
 
 # boolean function to regulate frameskipping
-def index_frame(frameno, frameskip):
+def get_index(frameno, frameskip=0):
     return frameno % (frameskip+1)
 
 def to_process(frameno):
     return not bool(frameno)
 
 # if detects a face in the picture before timeout, return it
-def ensure(stream, resizefactor=2, timeout=3):
+# unlike the main event loop, here cnn is used, to increase
+# accuracy.
+def ensure(stream, resizefactor=2, timeout=3, frameskip=0):
     
+    curr=0
     detected=None
-    timeout = time.time() + timeout
+    timeout = time.time() + timeout   
     
     while timeout > time.time() and not detected:
-        print(timeout-time.time())
-        frame = get_frame(stream, resizefactor)
-        detected = locate_faces(frame)
+        
+        curr = get_index(curr, frameskip)
+        print(f"frame: [{curr}] (t{time.time()-timeout})")
+        
+        if to_process(curr):
+            frame = get_frame(stream, resizefactor)
+            detected = locate_faces(frame, "cnn")
+        curr+=1
 
     return detected
 
@@ -50,29 +58,39 @@ def cleanup(stream, exitcode):
     print(f"goodbye. ({exitcode})")
     sys.exit(exitcode)
 
+
 # vars init
 timeout = 4
-resize=3
-frameskip=2
-current=0
+resize = 4
+frameskip = 4
+sleepiness = .5
 face_locations = []
 
 # Get a reference to webcam #0 (the default one)
 videostream = cv2.VideoCapture(0)
+curr = 0
 
 while True:
-    current = index_frame(current, frameskip)
-    # Only process every other frame of video to save time
     
-    if to_process(current):
+    curr = get_index(curr, frameskip)
+
+    # Only process when the frame index is modular to frameskip 
+    if to_process(curr):
         frame = get_frame(videostream, resize)
+        
         # Find all the faces and face encodings in the current frame of video
         face_locations = locate_faces(frame)
+    
+
+        if face_locations:
+            curr+=1
+            time.sleep(sleepiness)
+            continue
         
-        if not face_locations:
-            result = ensure(videostream, timeout)
-            print(f"result: {result}")
-            if not result:
-                cleanup(videostream, 1)
+        # If no face are to be found, ensure is not hog model limit
+        if not ensure(videostream, resize, timeout, frameskip):
+            break
+        
+    curr += 1
 
 cleanup(videostream, 0)
